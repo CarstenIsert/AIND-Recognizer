@@ -76,8 +76,36 @@ class SelectorBIC(ModelSelector):
         """
         warnings.filterwarnings("ignore", category=DeprecationWarning)
 
-        # TODO implement model selection based on BIC scores
-        raise NotImplementedError
+        # The logL values from the model increase, however, the formula for the Bayesian Information Criteria
+        # makes this negative, so overall we have a minimization problem. Therefore, we start with positive infinity.
+        best_BIC = math.inf
+        best_model = None
+        
+        # TODO: The correct value of the number of datapoints is not perfectly clear to me.
+        # I got this information on the forum, but I need to verify this because I also found
+        # other definitions like len(self.X[0]) which just seems to give the number of features
+        # or len(self.X)  
+        num_datapoints = len(self.lengths)
+        logN = math.log(num_datapoints)
+        print("Number of datapoints: ", num_datapoints)
+        
+        for num_states in range(self.min_n_components, self.max_n_components + 1):
+            try:
+                current_model = self.base_model(num_states)
+                logL = current_model.score(self.X, self.lengths)
+                # Information taken from the forum. It is not entirely clear why this is the case
+                # TODO: Need to verify. 
+                num_parameters = num_states**2 + 2 * num_states * num_datapoints - 1
+                current_BIC = -2 * logL + num_parameters * logN
+                print("Scores: BIC: {} logL: {} logN: {} P: {}".format(current_BIC, logL, logN, num_parameters))
+                if current_BIC < best_BIC:
+                    best_BIC = current_BIC
+                    best_model = current_model  
+            except:
+                print("Error")
+                continue
+              
+        return best_model
 
 
 class SelectorDIC(ModelSelector):
