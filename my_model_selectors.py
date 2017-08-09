@@ -81,10 +81,8 @@ class SelectorBIC(ModelSelector):
         best_BIC = math.inf
         best_model = None
         
-        # TODO: The correct value of the number of datapoints is not perfectly clear to me.
-        # I got this information on the forum, but I need to verify this because I also found
-        # other definitions like len(self.X[0]) which just seems to give the number of features
-        # or len(self.X)  
+        # The number of datapoints is given by the length of the array self.lengths which is a list
+        # of how long all the sequences representing the words are.  
         num_datapoints = len(self.lengths)
         logN = math.log(num_datapoints)
         print("Number of datapoints: ", num_datapoints)
@@ -97,7 +95,7 @@ class SelectorBIC(ModelSelector):
                 # TODO: Need to verify. 
                 num_parameters = num_states**2 + 2 * num_states * num_datapoints - 1
                 current_BIC = -2 * logL + num_parameters * logN
-                print("Scores: BIC: {} logL: {} logN: {} P: {}".format(current_BIC, logL, logN, num_parameters))
+                print("Scores: BIC: {} logL: {} logN: {} P: {} N_Features: {}".format(current_BIC, logL, logN, num_parameters, current_model.n_features))
                 if current_BIC < best_BIC:
                     best_BIC = current_BIC
                     best_model = current_model  
@@ -120,8 +118,43 @@ class SelectorDIC(ModelSelector):
     def select(self):
         warnings.filterwarnings("ignore", category=DeprecationWarning)
 
-        # TODO implement model selection based on DIC scores
-        raise NotImplementedError
+        best_DIC_score = -math.inf
+        best_model = None
+        
+        # In the paper mentioned above an important part was the parameter alpha which was used to
+        # weigh the influence of the competing words. For the specific example in the paper, a lower
+        # value of alpha performed significanlty better than values close to 1.
+        # However, this was not given in the above formula for DIC
+        alpha = 0.3
+         
+        if self.verbose: print("========= Now training word: ", self.this_word)
+        
+        for num_states in range(self.min_n_components, self.max_n_components + 1):
+            try:
+                current_model = self.base_model(num_states)
+                current_model_log_score = current_model.score(self.X, self.lengths)
+                if self.verbose: print("Score current_model_log_score for this model is: ", current_model_log_score)
+                sum_competing_word_log_scores = 0
+                for word in self.words:
+                    if word != self.this_word:
+                        try:
+                            competing_X, competing_length = self.hwords[word]
+                            competing_word_log_score = current_model.score(competing_X, competing_length)
+                        except:
+                            competing_word_log_score = 0
+                        if self.verbose: print("Competing word: {} with score: {}".format(word, competing_word_log_score))
+                        sum_competing_word_log_scores += competing_word_log_score
+                current_DIC_score = current_model_log_score - alpha * sum_competing_word_log_scores / (len(self.words)-1)
+                if self.verbose: print("Current DIC score: ", current_DIC_score)
+                
+                if current_DIC_score > best_DIC_score:
+                    best_DIC_score = current_DIC_score
+                    best_model = current_model  
+            except:
+                print("Error")
+                continue
+              
+        return best_model
 
 
 class SelectorCV(ModelSelector):
