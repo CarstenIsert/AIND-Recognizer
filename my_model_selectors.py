@@ -6,6 +6,7 @@ import numpy as np
 from hmmlearn.hmm import GaussianHMM
 from sklearn.model_selection import KFold
 from asl_utils import combine_sequences
+import asl_utils
 
 
 class ModelSelector(object):
@@ -78,14 +79,14 @@ class SelectorBIC(ModelSelector):
 
         # The logL values from the model increase, however, the formula for the Bayesian Information Criteria
         # makes this negative, so overall we have a minimization problem. Therefore, we start with positive infinity.
-        best_BIC = math.inf
+        best_BIC_score = math.inf
         best_model = None
         
         # The number of datapoints is given by the length of the array self.lengths which is a list
         # of how long all the sequences representing the words are.  
         num_datapoints = len(self.lengths)
         logN = math.log(num_datapoints)
-        print("Number of datapoints: ", num_datapoints)
+        if self.verbose: print("Number of datapoints: ", num_datapoints)
         
         for num_states in range(self.min_n_components, self.max_n_components + 1):
             try:
@@ -95,14 +96,15 @@ class SelectorBIC(ModelSelector):
                 # TODO: Need to verify. 
                 num_parameters = num_states**2 + 2 * num_states * num_datapoints - 1
                 current_BIC = -2 * logL + num_parameters * logN
-                print("Scores: BIC: {} logL: {} logN: {} P: {} N_Features: {}".format(current_BIC, logL, logN, num_parameters, current_model.n_features))
-                if current_BIC < best_BIC:
-                    best_BIC = current_BIC
+                if self.verbose: print("Scores: BIC: {} logL: {} logN: {} P: {} N_Features: {}".format(current_BIC, logL, logN, num_parameters, current_model.n_features))
+                if current_BIC < best_BIC_score:
+                    best_BIC_score = current_BIC
                     best_model = current_model  
             except:
-                print("Error")
+                if self.verbose: print("Error")
                 continue
-              
+        
+        print(self.this_word, " BIC ", best_BIC_score)      
         return best_model
 
 
@@ -125,7 +127,7 @@ class SelectorDIC(ModelSelector):
         # weigh the influence of the competing words. For the specific example in the paper, a lower
         # value of alpha performed significanlty better than values close to 1.
         # However, this was not given in the above formula for DIC
-        alpha = 0.3
+        alpha = 1.0
          
         if self.verbose: print("========= Now training word: ", self.this_word)
         
@@ -151,9 +153,10 @@ class SelectorDIC(ModelSelector):
                     best_DIC_score = current_DIC_score
                     best_model = current_model  
             except:
-                print("Error")
+                if self.verbose: print("Error")
                 continue
               
+        print("Best DIC", best_DIC_score, " with alpha ", alpha)      
         return best_model
 
 
@@ -165,5 +168,36 @@ class SelectorCV(ModelSelector):
     def select(self):
         warnings.filterwarnings("ignore", category=DeprecationWarning)
 
-        # TODO implement model selection using CV
-        raise NotImplementedError
+        best_CV_score = -math.inf
+        best_model = None
+
+        split_data = KFold()
+
+        for num_states in range(self.min_n_components, self.max_n_components + 1):
+            try:
+                # Only use cross-validation if we have enough datapoints to actually do splitting.
+                # In the standard case n_splits is set to 3. 
+                if len(self.lengths) > split_data.n_splits:
+                    current_CV_score = 0
+                    for cv_train_idx, cv_test_idx in split_data.split(self.sequences):
+                        cv_train_X, cv_train_lengths = asl_utils.combine_sequences(cv_train_idx, self.sequences)
+                        cv_test_X, cv_test_lengths = asl_utils.combine_sequences(cv_test_idx, self.sequences)
+                        current_model = GaussianHMM(n_components=num_states, covariance_type="diag", n_iter=1000,
+                                        random_state=self.random_state, verbose=False).fit(cv_train_X, cv_train_lengths)
+                        current_CV_score += current_model.score(cv_test_X, cv_test_lengths)
+                    current_CV_score = current_CV_score / split_data.n_splits
+                    if self.verbose: print("Score for tests: ", current_CV_score)
+                else:
+                    # If we don't have enough data, we just use the log score
+                    current_model = self.base_model(num_states)
+                    current_CV_score = current_model.score(self.X, self.lengths)
+               
+                if current_CV_score > best_CV_score:
+                    best_CV_score = current_CV_score
+                    best_model = current_model  
+            except:
+                if self.verbose: print("Error")
+                continue
+              
+        print("Best CV:", best_CV_score)      
+        return best_model
