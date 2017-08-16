@@ -92,7 +92,6 @@ class SelectorBIC(ModelSelector):
             try:
                 current_model = self.base_model(num_states)
                 logL = current_model.score(self.X, self.lengths)
-                # Information taken from the forum.
                 num_parameters = num_states**2 + 2 * num_states * num_datapoints - 1
                 current_BIC = -2 * logL + num_parameters * logN
                 if self.verbose: print("Scores: BIC: {} logL: {} logN: {} P: {} N_Features: {}".format(current_BIC, logL, logN, num_parameters, current_model.n_features))

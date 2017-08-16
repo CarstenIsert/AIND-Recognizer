@@ -34,7 +34,6 @@ def recognize(models: dict, test_set: SinglesData):
             except:
                 current_score = -math.inf
             probability_dict[current_word] = current_score
-            # print("Score for {} is {}".format(current_word, current_score))
             
             if current_score > best_score:
                 best_score = current_score
